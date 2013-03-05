@@ -30,10 +30,11 @@ namespace Pug.Cartage.Instant
 				carts = new Dictionary<string, TransientCart>();
 				userSessionProvider.CurrentSession.Set<Dictionary<string, TransientCart>>("Cartage.Instant", carts);
 			}
+
 			return carts;
 		}
 
-		TransientCart GetCart(string cart)
+		TransientCart _GetCart(string cart)
 		{
 			Dictionary<string, TransientCart> carts = GetCartStore();
 
@@ -47,6 +48,74 @@ namespace Pug.Cartage.Instant
 			return cartStore;
 		}
 
+		string GetNewLineIdentifier()
+		{
+			byte[] binarySeed = BitConverter.GetBytes(DateTime.UtcNow.ToBinary());
+
+			string lineIdentifier = Pug.Base32.From(binarySeed).Replace("=", string.Empty);
+
+			return lineIdentifier;
+		}
+
+		//public string AddItem(string cart, string productCode, decimal quantity, IDictionary<string, string> attributes)
+		//{
+		//    TransientCart cartStore = __GetCart(cart);
+
+		//    string lineIdentifier = GetNewLineIdentifier();
+
+		//    IDictionary<string, ICartLineAttributeInfo> lineAttributes = new Dictionary<string, ICartLineAttributeInfo>();
+
+		//    foreach( string attribute in attributes.Keys)
+		//        lineAttributes.Add(attribute, new CartLineAttributeInfo(attribute, attributes[attribute]));
+
+		//    TransientCartLine newLine = new TransientCartLine(new CartLineInfo(lineIdentifier, productCode, quantity), lineAttributes);
+		//    cartStore.Lines.Add(lineIdentifier, newLine);
+
+		//    return lineIdentifier;
+		//}
+
+		//public ICartLine GetLine(string cart, string identifier)
+		//{
+		//    TransientCart cartStore = GetCart(cart);
+
+		//    if (!cartStore.Lines.ContainsKey(identifier))
+		//        return null;
+
+		//    return cartStore.Lines[identifier];
+		//}
+
+		//public ICollection<ICartLine> GetLines(string cart)
+		//{
+		//    TransientCart cartStore = GetCart(cart);
+
+		//    return cartStore.Lines.Values.ToArray();
+		//}
+
+		//public void UpdateLine(string cart, string identifier, decimal quantity, IDictionary<string, string> attributes)
+		//{
+		//    TransientCart cartStore = __GetCart(cart);
+
+		//    if (!cartStore.Lines.ContainsKey(identifier))
+		//        throw new IndexOutOfRangeException("Line identifier is not known.");
+
+		//    ICartLine cartLine = cartStore.Lines[identifier];
+
+		//    IDictionary<string, ICartLineAttributeInfo> lineAttributes = new Dictionary<string, ICartLineAttributeInfo>();
+
+		//    foreach (string attribute in attributes.Keys)
+		//        lineAttributes.Add(attribute, new CartLineAttributeInfo(attribute, attributes[attribute]));
+
+		//    cartStore.Lines[identifier] = new TransientCartLine(new CartLineInfo(identifier, cartLine.Info.ProductCode, quantity), lineAttributes);
+		//}
+
+		//public void Clear(string cart)
+		//{
+		//    TransientCart cartStore = __GetCart(cart);
+		//    cartStore.Lines.Clear();
+		//}
+
+		#region ICartInfoStoreProvider Members
+
 		public bool CartExists(string identifier)
 		{
 			Dictionary<string, TransientCart> carts = GetCartStore();
@@ -57,98 +126,112 @@ namespace Pug.Cartage.Instant
 		public void RegisterCart(string identifier)
 		{
 			Dictionary<string, TransientCart> carts = GetCartStore();
-			
+
 			if (carts.ContainsKey(identifier))
-				throw new CartExists(identifier);			
+				throw new CartExists(identifier);
 
 			TransientCart cartStore = new TransientCart(identifier, userSessionProvider.CurrentSession.Identifier);
 
 			carts.Add(identifier, cartStore);
 		}
 
-		string GetNewLineIdentifier()
+		public void DeleteCart(string identifier)
 		{
-			byte[] binarySeed = BitConverter.GetBytes(DateTime.UtcNow.ToBinary());
-
-			string lineIdentifier = Pug.Base32.From(binarySeed).Replace("=", string.Empty);
-
-			return lineIdentifier;
+			GetCartStore().Remove(identifier);
 		}
 
-		#region ICartInfoStoreProvider Members
-
-		public string AddItem(string cart, string productCode, decimal quantity, IDictionary<string, string> attributes)
+		public void DeleteLineAttribute(string cart, string line, string name)
 		{
-			TransientCart cartStore = GetCart(cart);
+			((TransientCartLine)_GetCart(cart).Lines[line]).DeleteAttribute(name);
+		}
 
-			string lineIdentifier = GetNewLineIdentifier();
-
-			CartLine newLine = new CartLine(lineIdentifier, productCode, attributes, quantity);
-			cartStore.Lines.Add(lineIdentifier, newLine);
-
-			return lineIdentifier;
+		public void DeleteLines(string cart)
+		{
+			TransientCart cartStore = _GetCart(cart);
+			cartStore.Lines.Clear();
 		}
 
 		public void DeleteLine(string cart, string identifier)
 		{
-			TransientCart cartStore = GetCart(cart);
+			TransientCart cartStore = _GetCart(cart);
 
 			cartStore.Lines.Remove(identifier);
 		}
 
-		public ICollection<CartInfo> GetCarts(Range<DateTime> creationPeriod, Range<DateTime> modificationPeriod)
+		public ICollection<ICartInfo> GetCarts(Range<DateTime> creationPeriod, Range<DateTime> modificationPeriod)
 		{
 			Application.ApplicationUserSession userSession = userSessionProvider.CurrentSession;
 			Dictionary<string, TransientCart> carts = userSession.Get<Dictionary<string, TransientCart>>("Cartage.Instant");
 
 			var filteredCarts = from cart in carts.Values 
-								where (creationPeriod != null && cart.CreationTimestamp.IsWithin(creationPeriod)) &&
-										(modificationPeriod != null && cart.ModificationTimestamp.IsWithin(modificationPeriod)) 
-								select new CartInfo(cart.Identifier, cart.CreationTimestamp, cart.CreateUser, cart.ModificationTimestamp, cart.LastModifyUser);
+								where (creationPeriod != null && cart.Info.Created.IsWithin(creationPeriod)) &&
+										(modificationPeriod != null && cart.Info.LastModified.IsWithin(modificationPeriod)) 
+								select new CartInfo(cart.Info.Identifier, cart.Info.Created, cart.Info.CreateUser, cart.Info.LastModified, cart.Info.LastModifyUser);
 
 			return filteredCarts.ToArray();
 		}
 
-		public CartInfo GetInfo(string identifier)
+		public ICartInfo GetCart(string identifier)
 		{
-			TransientCart cartStore = GetCart(identifier);
-
-			return new CartInfo(identifier, cartStore.CreationTimestamp, cartStore.CreateUser, cartStore.ModificationTimestamp, cartStore.LastModifyUser);
+			return _GetCart(identifier).Info;
 		}
 
-		public CartLine GetLine(string cart, string identifier)
+		public ICartLineInfo GetLine(string cart, string identifier)
 		{
-			TransientCart cartStore = GetCart(cart);
-
-			if (!cartStore.Lines.ContainsKey(identifier))
-				return null;
-
-			return cartStore.Lines[identifier];
+			return _GetCart(cart).Lines[identifier].Info;
 		}
 
-		public ICollection<CartLine> GetLines(string cart)
+		public IDictionary<string, ICartLineAttributeInfo> GetLineAttributes(string cart, string identifier)
 		{
-			TransientCart cartStore = GetCart(cart);
-
-			return cartStore.Lines.Values.ToArray();
+			return _GetCart(cart).Lines[identifier].Attributes;
 		}
 
-		public void UpdateLine(string cart, string identifier, decimal quantity, IDictionary<string, string> attributes)
+		public ICollection<ICartLineInfo> GetLines(string cart)
 		{
-			TransientCart cartStore = GetCart(cart);
-
-			if (!cartStore.Lines.ContainsKey(identifier))
-				throw new IndexOutOfRangeException("Line identifier is not known.");
-
-			CartLine cartLine = cartStore.Lines[identifier];
-
-			cartStore.Lines[identifier] = new CartLine(identifier, cartLine.ProductCode, attributes, quantity);
+			return (from ICartLine line in _GetCart(cart).Lines.Values select line.Info).ToArray();
 		}
 
-		public void Clear(string cart)
+		public void InsertLine(string cart, string identifier, string productCode, decimal quantity)
 		{
-			TransientCart cartStore = GetCart(cart);
-			cartStore.Lines.Clear();
+			_GetCart(cart).Lines.Add(identifier, new TransientCartLine(new CartLineInfo(identifier, productCode, quantity), new Dictionary<string, ICartLineAttributeInfo>()));
+		}
+
+		public void InsertLineAttribute(string cart, string line, string name, string value)
+		{
+			((TransientCartLine)_GetCart(cart).Lines[line]).SetAttribute(name, value);
+		}
+
+		public bool LineExists(string cart, string identifier)
+		{
+			return _GetCart(cart).Lines.ContainsKey(identifier);
+		}
+
+		public void SetLineAttribute(string cart, string line, string name, string value)
+		{
+			((TransientCartLine)_GetCart(cart).Lines[line]).SetAttribute(name, value);
+		}
+
+		public void UpdateLine(string cart, string identifier, decimal quantity)
+		{
+			ICartLineInfo lineInfo = _GetCart(cart).Lines[identifier].Info;
+
+			lineInfo = new CartLineInfo(identifier, lineInfo.ProductCode, quantity);
+		}
+
+		public void BeginTransaction()
+		{
+		}
+
+		public void CommitTransaction()
+		{
+		}
+
+		public void EnlistInTransaction(System.Transactions.Transaction transaction)
+		{
+		}
+
+		public void RollbackTransaction()
+		{
 		}
 
 		#endregion
@@ -157,6 +240,7 @@ namespace Pug.Cartage.Instant
 
 		public void Dispose()
 		{
+			userSessionProvider.CurrentSession.Remove<Dictionary<string, TransientCart>>("Cartage.Instant");
 		}
 
 		#endregion

@@ -2,71 +2,38 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+
+using Pug.Extensions;
+
 using Application = Pug.Application;
 
 namespace Pug.Cartage.Instant
 {
 	internal class TransientCart
 	{
-		string identifier;
-		DateTime creationTimestamp, modificationTimestamp;
-		string createUser, lastModifyUser;
-
-		Dictionary<string, CartLine> lines;
+		ICartInfo info;
+		Dictionary<string, ICartLine> lines;
 
 		public TransientCart(string identifier, string createUser)
 		{
-			this.identifier = identifier;
-			this.createUser = createUser;
-			this.creationTimestamp = DateTime.Now;
+			info = new CartInfo(identifier, DateTime.Now, createUser, DateTime.Now, createUser);
 
-			lines = new Dictionary<string, CartLine>();
+			lines = new Dictionary<string, ICartLine>();
 		}
 
-		public string Identifier
+		public ICartInfo Info
 		{
 			get
 			{
-				return identifier;
+				return this.info;
+			}
+			internal set
+			{
+				this.info = value;
 			}
 		}
-		public DateTime CreationTimestamp
-		{
-			get
-			{
-				return creationTimestamp;
-			}
-		}
-		public string CreateUser
-		{
-			get
-			{
-				return createUser;
-			}
-		}
-		public DateTime ModificationTimestamp
-		{
-			get
-			{
-				return modificationTimestamp;
-			}
-			set
-			{
-				modificationTimestamp = value;
-			}
-		}
-		public string LastModifyUser
-		{
-			get
-			{
-				return lastModifyUser;
-			}
-			set
-			{
-				lastModifyUser = value;
-			}
-		}
-		public Dictionary<string, CartLine> Lines
+
+		public Dictionary<string, ICartLine> Lines
 		{
 			get
 			{
