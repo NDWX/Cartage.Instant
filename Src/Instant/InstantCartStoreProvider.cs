@@ -16,7 +16,15 @@ namespace Pug.Cartage.Instant
 		public InstantCartStoreProvider(Application.IApplicationUserSessionProvider userSessionProvider)
 		{
 			this.userSessionProvider = userSessionProvider;
+		}
 
+		string GetNewLineIdentifier()
+		{
+			byte[] binarySeed = BitConverter.GetBytes(DateTime.UtcNow.ToBinary());
+
+			string lineIdentifier = Pug.Base32.From(binarySeed).Replace("=", string.Empty);
+
+			return lineIdentifier;
 		}
 		
 		private Dictionary<string, TransientCart> GetCartStore()
@@ -27,8 +35,7 @@ namespace Pug.Cartage.Instant
 
 			if (carts == null)
 			{
-				carts = new Dictionary<string, TransientCart>();
-				userSessionProvider.CurrentSession.Set<Dictionary<string, TransientCart>>("Cartage.Instant", carts);
+				throw new MissingCartStore();
 			}
 
 			return carts;
@@ -46,15 +53,6 @@ namespace Pug.Cartage.Instant
 			}
 
 			return cartStore;
-		}
-
-		string GetNewLineIdentifier()
-		{
-			byte[] binarySeed = BitConverter.GetBytes(DateTime.UtcNow.ToBinary());
-
-			string lineIdentifier = Pug.Base32.From(binarySeed).Replace("=", string.Empty);
-
-			return lineIdentifier;
 		}
 
 		//public string AddItem(string cart, string productCode, decimal quantity, IDictionary<string, string> attributes)
@@ -178,12 +176,22 @@ namespace Pug.Cartage.Instant
 
 		public ICartLineInfo GetLine(string cart, string identifier)
 		{
-			return _GetCart(cart).Lines[identifier].Info;
+			TransientCart _cart = _GetCart(cart);
+
+			if (!_cart.Lines.ContainsKey(identifier))
+				throw new UnknownCartLine();
+
+			return _cart.Lines[identifier].Info;
 		}
 
 		public IDictionary<string, ICartLineAttributeInfo> GetLineAttributes(string cart, string identifier)
 		{
-			return _GetCart(cart).Lines[identifier].Attributes;
+			TransientCart _cart = _GetCart(cart);
+
+			if (!_cart.Lines.ContainsKey(identifier))
+				throw new UnknownCartLine();
+
+			return _cart.Lines[identifier].Attributes;
 		}
 
 		public ICollection<ICartLineInfo> GetLines(string cart)
@@ -198,7 +206,12 @@ namespace Pug.Cartage.Instant
 
 		public void InsertLineAttribute(string cart, string line, string name, string value)
 		{
-			((TransientCartLine)_GetCart(cart).Lines[line]).SetAttribute(name, value);
+			TransientCart _cart = _GetCart(cart);
+
+			if (!_cart.Lines.ContainsKey(line))
+				throw new UnknownCartLine();
+
+			((TransientCartLine)_cart.Lines[line]).SetAttribute(name, value);
 		}
 
 		public bool LineExists(string cart, string identifier)
@@ -208,14 +221,24 @@ namespace Pug.Cartage.Instant
 
 		public void SetLineAttribute(string cart, string line, string name, string value)
 		{
-			((TransientCartLine)_GetCart(cart).Lines[line]).SetAttribute(name, value);
+			TransientCart _cart = _GetCart(cart);
+
+			if (!_cart.Lines.ContainsKey(line))
+				throw new UnknownCartLine();
+
+			((TransientCartLine)_cart.Lines[line]).SetAttribute(name, value);
 		}
 
 		public void UpdateLine(string cart, string identifier, decimal quantity)
 		{
-			ICartLineInfo lineInfo = _GetCart(cart).Lines[identifier].Info;
+			TransientCart _cart = _GetCart(cart);
 
-			lineInfo = new CartLineInfo(identifier, lineInfo.ProductCode, quantity);
+			if (!_cart.Lines.ContainsKey(identifier))
+				throw new UnknownCartLine();
+
+			ICartLineInfo lineInfo = _cart.Lines[identifier].Info;
+
+			((TransientCartLine)_cart.Lines[identifier]).Info = new CartLineInfo(identifier, lineInfo.ProductCode, quantity);
 		}
 
 		public void BeginTransaction()
