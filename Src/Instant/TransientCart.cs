@@ -16,7 +16,7 @@ namespace Pug.Cartage.Instant
 
 		public TransientCart(string identifier, string createUser)
 		{
-			info = new CartInfo(identifier, DateTime.Now, createUser, DateTime.Now, createUser);
+			info = new CartInfo(identifier, DateTime.Now, createUser, DateTime.Now, createUser, false);
 
 			lines = new Dictionary<string, ICartLine>();
 		}
